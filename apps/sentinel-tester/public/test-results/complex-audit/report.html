@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sentinel A2UI Complex State Validation Report</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #020617; color: #f8fafc; font-family: ui-sans-serif, system-ui, sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); }
+        .step-card { transition: transform 0.3s ease; }
+        .step-card:hover { transform: translateY(-5px); border-color: #4f46e5; }
+    </style>
+</head>
+<body class="p-8 md:p-16">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <div class="flex justify-between items-end mb-16 border-b border-white/10 pb-8">
+            <div>
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-black tracking-widest uppercase">
+                        Test Passed
+                    </div>
+                    <span class="text-indigo-400 font-mono text-xs uppercase tracking-widest">Protocol v3.0.0</span>
+                </div>
+                <h1 class="text-5xl font-black tracking-tighter uppercase italic">Validation Summary</h1>
+                <p class="text-slate-400 mt-2 font-medium">Complex Interaction Suite: Deep Security Audit & Deployment</p>
+            </div>
+            <div class="text-right font-mono text-[10px] opacity-40 uppercase tracking-widest">
+                Timestamp: 2026-03-11 21:50 UTC<br>
+                Runtime: 28.1s
+            </div>
+        </div>
+
+        <!-- Tech Stack Grid -->
+        <div class="grid grid-cols-4 gap-4 mb-16">
+            <div class="glass p-6 rounded-2xl">
+                <div class="text-[10px] uppercase font-black text-indigo-400 mb-1">Orchestration</div>
+                <div class="text-lg font-bold">LangGraph VPS</div>
+            </div>
+            <div class="glass p-6 rounded-2xl">
+                <div class="text-[10px] uppercase font-black text-indigo-400 mb-1">Intelligence</div>
+                <div class="text-lg font-bold">Perplexity Sonar</div>
+            </div>
+            <div class="glass p-6 rounded-2xl">
+                <div class="text-[10px] uppercase font-black text-indigo-400 mb-1">Protocol</div>
+                <div class="text-lg font-bold">A2A / AGUI 1.0</div>
+            </div>
+            <div class="glass p-6 rounded-2xl">
+                <div class="text-[10px] uppercase font-black text-indigo-400 mb-1">Validation</div>
+                <div class="text-lg font-bold">Playwright Headless</div>
+            </div>
+        </div>
+
+        <!-- Steps Timeline -->
+        <div class="space-y-24">
+            <!-- Step 1 -->
+            <div class="step-card glass rounded-[3rem] p-8 md:p-12 overflow-hidden border-2 border-white/5">
+                <div class="flex flex-col md:flex-row gap-12 items-center">
+                    <div class="flex-1 space-y-6 text-center md:text-left">
+                        <div class="text-4xl font-black text-indigo-500">01</div>
+                        <h2 class="text-3xl font-bold tracking-tight">Node Initialization</h2>
+                        <p class="text-slate-400 leading-relaxed text-lg">The Sentinel Core establishes a secure link. The resizable workspace node enters <strong>Neural Standby</strong>, showing the isolated boundary is active and awaiting an intent signal.</p>
+                    </div>
+                    <div class="flex-1 w-full max-w-xl">
+                        <img src="01-initialized.png" alt="Initialization" class="rounded-2xl shadow-2xl border border-white/10 hover:scale-[1.02] transition-transform duration-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="step-card glass rounded-[3rem] p-8 md:p-12 overflow-hidden border-2 border-white/5">
+                <div class="flex flex-col md:flex-row-reverse gap-12 items-center">
+                    <div class="flex-1 space-y-6 text-center md:text-left">
+                        <div class="text-4xl font-black text-indigo-500">02</div>
+                        <h2 class="text-3xl font-bold tracking-tight">Intent Disambiguation</h2>
+                        <p class="text-slate-400 leading-relaxed text-lg">User injects complex security intent. The <strong>Pulse Trace Matrix</strong> captures the A2A request and successfully retrieves the AGUI manifest from the VPS.</p>
+                    </div>
+                    <div class="flex-1 w-full max-w-xl">
+                        <img src="02-a2a-received.png" alt="A2A Received" class="rounded-2xl shadow-2xl border border-white/10 hover:scale-[1.02] transition-transform duration-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3 -->
+            <div class="step-card glass rounded-[3rem] p-8 md:p-12 overflow-hidden border-2 border-white/5">
+                <div class="flex flex-col md:flex-row gap-12 items-center">
+                    <div class="flex-1 space-y-6 text-center md:text-left">
+                        <div class="text-4xl font-black text-indigo-500">03</div>
+                        <h2 class="text-3xl font-bold tracking-tight">Generative UI Synthesis</h2>
+                        <p class="text-slate-400 leading-relaxed text-lg">AI-powered <strong>A2UI layer</strong> synthesizes a stateful HTML5 document. A stunning "Mission Control" dashboard is painted inside the isolated node boundary with interactive buttons.</p>
+                    </div>
+                    <div class="flex-1 w-full max-w-xl">
+                        <img src="03-ui-ready.png" alt="UI Generated" class="rounded-2xl shadow-2xl border border-white/10 hover:scale-[1.02] transition-transform duration-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 4 -->
+            <div class="step-card glass rounded-[3rem] p-8 md:p-12 overflow-hidden border-2 border-white/5">
+                <div class="flex flex-col md:flex-row-reverse gap-12 items-center">
+                    <div class="flex-1 space-y-6 text-center md:text-left">
+                        <div class="text-4xl font-black text-indigo-500">04</div>
+                        <h2 class="text-3xl font-bold tracking-tight">Active Interaction</h2>
+                        <p class="text-slate-400 leading-relaxed text-lg">Playwright executes a multi-click sequence: <strong>Start Scan -> Aggressive Protocol</strong>. The UI reflects real-time state changes and animation triggers within the iframe.</p>
+                    </div>
+                    <div class="flex-1 w-full max-w-xl">
+                        <img src="04-scanning.png" alt="Scanning State" class="rounded-2xl shadow-2xl border border-white/10 hover:scale-[1.02] transition-transform duration-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 5 -->
+            <div class="step-card glass rounded-[3rem] p-8 md:p-12 overflow-hidden border-2 border-white/5 bg-emerald-500/5">
+                <div class="flex flex-col md:flex-row gap-12 items-center">
+                    <div class="flex-1 space-y-6 text-center md:text-left">
+                        <div class="text-4xl font-black text-emerald-500">05</div>
+                        <h2 class="text-3xl font-bold tracking-tight text-emerald-400">Final Secured State</h2>
+                        <p class="text-slate-400 leading-relaxed text-lg">Deployment confirmed via modal trigger. The entire system transitions to a <strong>LOCKED</strong> state. Success validated by DOM interrogation and final viewport capture.</p>
+                    </div>
+                    <div class="flex-1 w-full max-w-xl">
+                        <img src="06-success.png" alt="Success State" class="rounded-2xl shadow-2xl border border-emerald-500/20 hover:scale-[1.02] transition-transform duration-500">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="mt-32 pt-12 border-t border-white/10 flex justify-between items-center text-[10px] font-mono text-slate-500 uppercase tracking-widest mb-20">
+            <div>
+                System Status: NOMINAL | Memory: ACM v1.0.1
+            </div>
+            <div>
+                &copy; 2026 Sanctum Neural Core
+            </div>
+        </div>
+    </div>
+</body>
+</html>

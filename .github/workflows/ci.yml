@@ -1,0 +1,92 @@
+name: Sanctum Brain CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  backend-build:
+    name: Build Backend VPS Container
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Test Backend
+        run: |
+          cd apps/backend
+          docker build -t sanctum-backend:test .
+
+  desktop-build:
+    name: Build Desktop (Tauri)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Install dependencies (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          
+      - name: Build Tauri App
+        run: |
+          cd apps/desktop
+          npm install
+          npm run tauri build
+
+  mobile-build:
+    name: Build Mobile (Flutter Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          
+      - name: Build APK
+        run: |
+          cd apps/mobile
+          flutter pub get
+          flutter build apk --debug --dart-define=WS_URL="wss://localhost/ws"
+
+  web-validation:
+    name: UI Validation (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          
+      - name: Install Dependencies
+        run: |
+          cd apps/web
+          npm install
+          npx playwright install --with-deps
+          
+      - name: Run Playwright Tests
+        run: |
+          cd apps/web
+          npx playwright test tests/a2ui-validation.spec.ts

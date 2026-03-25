@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package sanctum;
+
+service SanctumA2AService {
+  // Unary call for single-shot context updates or handshakes
+  rpc PostContext (AgentPacket) returns (AgentPacket) {}
+
+  // Bidirectional streaming for real-time secure communication
+  rpc SecureChannel (stream AgentPacket) returns (stream AgentPacket) {}
+}
+
+message AgentPacket {
+  string session_id = 1;
+  oneof payload {
+    Handshake handshake = 2;
+    EncryptedData data = 3;
+    Heartbeat heartbeat = 4;
+  }
+}
+
+message Handshake {
+  string device_id = 1;
+  bytes public_key = 2;
+  string version = 3;
+}
+
+message EncryptedData {
+  bytes ciphertext = 1;
+  bytes nonce = 2;
+  bytes auth_tag = 3;
+}
+
+message Heartbeat {
+  int64 latency_ms = 1;
+  int64 timestamp = 2;
+}

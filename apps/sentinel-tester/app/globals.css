@@ -1,0 +1,99 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #050507;
+  --foreground: #eceff4;
+  --card: #1a1b26;
+  --border: rgba(255, 255, 255, 0.1);
+  --muted-foreground: #64748b;
+  --aurora-red: #bf616a;
+  --aurora-orange: #d08770;
+  --aurora-yellow: #ebcb8b;
+  --aurora-green: #a3be8c;
+  --aurora-purple: #b48ead;
+  --aurora-blue: #81a1c1;
+  --aurora-cyan: #88c0d0;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--background);
+}
+
+body {
+  color: var(--foreground);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* === Utility Classes === */
+
+.cyber-grid {
+  background-image: linear-gradient(to right, rgba(136, 192, 208, 0.04) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(136, 192, 208, 0.04) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+.terminal-shadow {
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 20px rgba(180, 142, 173, 0.05);
+}
+
+.glass-morphism {
+  background: rgba(10, 10, 12, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.scanline-effect {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(to right, transparent, rgba(136, 192, 208, 0.2), transparent);
+  animation: scanline 4s linear infinite;
+  pointer-events: none;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar,
+::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track,
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:hover {
+  background: var(--aurora-blue);
+}
+
+/* Hide scrollbar but still scrollable */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # The Brain: LangGraph Orchestrator
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    network_mode: host
+    environment:
+      - DATABASE_URL=postgresql://sanctum:sanctum_pass@127.0.0.1:5432/sanctum_db
+      - REDIS_URL=redis://127.0.0.1:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_API_VERSION=v1
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    restart: always
+
+  # Knowledge Base: Vector & Structured Storage
+  db:
+    image: postgres:16-alpine
+    network_mode: host
+    environment:
+      - POSTGRES_USER=sanctum
+      - POSTGRES_PASSWORD=sanctum_pass
+      - POSTGRES_DB=sanctum_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    network_mode: host
+    restart: always
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    network_mode: host
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    restart: always
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.11.0
+    network_mode: host
+    environment:
+      - OPENSEARCH_HOSTS=http://127.0.0.1:9200
+      - DISABLE_SECURITY_PLUGIN=true
+    depends_on:
+      - opensearch
+    restart: always
+
+volumes:
+  postgres_data:
+  opensearch_data:

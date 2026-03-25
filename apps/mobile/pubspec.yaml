@@ -1,0 +1,23 @@
+name: sanctum_mobile
+description: Sanctum Brain Distributed Autonomous Agent Ecosystem (Mobile)
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  grpc: ^3.2.0
+  protobuf: ^3.1.0
+  flutter_cube: ^0.1.0 # Simple 3D for Orb
+  shared_preferences: ^2.1.0
+  http: ^1.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true

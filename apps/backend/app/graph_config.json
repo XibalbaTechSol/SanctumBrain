@@ -1,0 +1,91 @@
+{
+  "nodes": [
+    {
+      "id": "security_ingress",
+      "label": "Security & Pulse",
+      "type": "security",
+      "description": "Hydrates system state and scans for PII.",
+      "properties": {
+        "scrub_pii": true,
+        "strictness": "HIGH"
+      }
+    },
+    {
+      "id": "supervisor",
+      "label": "System Supervisor",
+      "type": "orchestrator",
+      "description": "Orchestrates skills based on kinetic intent and system state."
+    },
+    {
+      "id": "vision",
+      "label": "Vision Agent",
+      "type": "skill",
+      "description": "Multi-modal visual reasoning."
+    },
+    {
+      "id": "audio",
+      "label": "Voice Agent",
+      "type": "skill",
+      "description": "Speech-to-intent processing."
+    },
+    {
+      "id": "tools",
+      "label": "Skill Engine",
+      "type": "skill",
+      "description": "Executes shell, file, and API operations."
+    },
+    {
+      "id": "rag",
+      "label": "Neural Memory",
+      "type": "memory",
+      "description": "Retrieves context from OpenSearch."
+    },
+    {
+      "id": "reasoner",
+      "label": "Deep Thought",
+      "type": "orchestrator",
+      "description": "Multi-step deliberation."
+    },
+    {
+      "id": "generator",
+      "label": "A2UI Synthesizer",
+      "type": "generator",
+      "description": "Generates final agentic interface."
+    },
+    {
+      "id": "security_egress",
+      "label": "Outbound Audit",
+      "type": "security",
+      "description": "Prevents leaks in final response."
+    },
+    {
+      "id": "para_manager",
+      "label": "PARA Manager",
+      "type": "skill",
+      "description": "Manages Projects, Areas, Resources, and Archives."
+    }
+  ],
+  "edges": [
+    { "source": "__start__", "target": "security_ingress" },
+    { "source": "security_ingress", "target": "supervisor", "condition": "passed" },
+    { "source": "security_ingress", "target": "security_egress", "condition": "violation" },
+    { "source": "supervisor", "target": "vision", "condition": "intent=image" },
+    { "source": "supervisor", "target": "audio", "condition": "intent=audio" },
+    { "source": "supervisor", "target": "tools", "condition": "intent=api" },
+    { "source": "supervisor", "target": "tools", "condition": "intent=code" },
+    { "source": "supervisor", "target": "rag", "condition": "intent=knowledge" },
+    { "source": "supervisor", "target": "reasoner", "condition": "intent=deep_reason" },
+    { "source": "supervisor", "target": "generator", "condition": "intent=system_health" },
+    { "source": "supervisor", "target": "generator", "condition": "intent=general" },
+    { "source": "supervisor", "target": "para_manager", "condition": "intent=para" },
+    { "source": "vision", "target": "generator" },
+    { "source": "audio", "target": "generator" },
+    { "source": "tools", "target": "generator" },
+    { "source": "rag", "target": "generator" },
+    { "source": "para_manager", "target": "generator" },
+    { "source": "reasoner", "target": "reasoner", "condition": "REFINE" },
+    { "source": "reasoner", "target": "generator", "condition": "COMPLETE" },
+    { "source": "generator", "target": "security_egress" },
+    { "source": "security_egress", "target": "__end__" }
+  ]
+}
