@@ -8,6 +8,12 @@ SanctumBrain is a private, distributed AI ecosystem designed for personal owners
 - **Digital Canvas (Desktop/Sentinel)**: A Tauri-based interface providing local system access, high-performance Three.js rendering, and offline PII redaction.
 - **Nomad Interface (Mobile)**: A Flutter application for secure, mobile-native access to your sovereign brain via gRPC/WebSockets.
 
+## 📸 Visual Overview
+
+| Sovereign Workspace | Neural Graph Interface | Dashboard Analytics |
+|:---:|:---:|:---:|
+| ![Workspace](./assets/docs/brain-1.png) | ![Neural Graph](./assets/docs/brain-2.png) | ![Dashboard](./assets/docs/brain-3.png) |
+
 ## 📂 Monorepo Structure
 
 - `/apps/backend`: Python/FastAPI/LangGraph orchestration engine.
