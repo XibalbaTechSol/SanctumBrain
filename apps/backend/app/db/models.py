@@ -7,6 +7,10 @@ class User(models.Model):
     id = fields.CharField(max_length=50, pk=True)
     email = fields.CharField(max_length=255)
     name = fields.CharField(max_length=255)
+    plan = fields.CharField(max_length=50, default="COMMUNITY") # 'COMMUNITY', 'PROFESSIONAL', 'SOVEREIGN'
+    stripe_customer_id = fields.CharField(max_length=255, null=True)
+    paypal_subscription_id = fields.CharField(max_length=255, null=True)
+    paypal_email = fields.CharField(max_length=255, null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
 
     class Meta:
@@ -50,6 +54,11 @@ class Event(models.Model):
     description = fields.TextField(null=True)
     start_time = fields.DatetimeField()
     end_time = fields.DatetimeField()
+    category = fields.CharField(max_length=50, default="AREA") # 'PROJECT', 'AREA', 'RESOURCE', 'ARCHIVE'
+    location = fields.TextField(null=True)
+    linked_id = fields.CharField(max_length=100, null=True) 
+    tags = fields.JSONField(null=True)
+    is_google_synced = fields.BooleanField(default=False)
     user = fields.ForeignKeyField("models.User", related_name="events")
     created_at = fields.DatetimeField(auto_now_add=True)
 
@@ -166,6 +175,40 @@ class NodeEvent(models.Model):
     class Meta:
         table = "node_events"
 
+class AgentRiskProfile(models.Model):
+    id = fields.UUIDField(pk=True)
+    agent_id = fields.CharField(max_length=100, unique=True)
+    risk_level = fields.CharField(max_length=50, default="LOW") # 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
+    permissions = fields.JSONField(default=list) # List of sensitive tools allowed
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "agent_risk_profiles"
+
+class AdaptiveUIComponent(models.Model):
+    id = fields.CharField(max_length=100, pk=True) # e.g., 'BANKING_UI', 'WEATHER_ADAPTIVE'
+    name = fields.CharField(max_length=255)
+    component_type = fields.CharField(max_length=50) # 'INFO_CARD', 'DASHBOARD'
+    manifest = fields.TextField() # The AGUI/A2UI JSON structure
+    adaptive_rules = fields.JSONField(null=True) # Gemma 4 refinement rules
+    usage_count = fields.IntField(default=0)
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "adaptive_ui_components"
+
+class PlatformConfig(models.Model):
+    id = fields.UUIDField(pk=True)
+    platform = fields.CharField(max_length=50, unique=True) # 'TELEGRAM', 'WHATSAPP'
+    api_token = fields.TextField(null=True)
+    webhook_url = fields.CharField(max_length=255, null=True)
+    is_active = fields.BooleanField(default=False)
+    settings = fields.JSONField(null=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "platform_configs"
+
 # Pydantic models
 Project_Pydantic = pydantic_model_creator(Project, name="Project_Pydantic")
 Area_Pydantic = pydantic_model_creator(Area, name="Area_Pydantic")
@@ -173,3 +216,4 @@ Resource_Pydantic = pydantic_model_creator(Resource, name="Resource_Pydantic")
 Archive_Pydantic = pydantic_model_creator(Archive, name="Archive_Pydantic")
 User_Pydantic = pydantic_model_creator(User, name="User_Pydantic")
 Habit_Pydantic = pydantic_model_creator(Habit, name="Habit_Pydantic")
+Event_Pydantic = pydantic_model_creator(Event, name="Event_Pydantic")

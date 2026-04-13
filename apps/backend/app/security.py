@@ -1,20 +1,21 @@
 import json
 import re
-from typing import Dict, Any, List
-from .state import AgentState
-
-import json
-import re
 import time
 import os
 import redis
 import psutil
 from typing import Dict, Any, List
 from langchain_core.messages import SystemMessage, HumanMessage
-from .state import AgentState
-from .utils import log_event
-# We import from .nodes to get the initialized local_model and on_device_model
-from .nodes import local_model, on_device_model
+try:
+    from app.state import AgentState
+    from app.utils import log_event
+except ImportError:
+    try:
+        from .state import AgentState
+        from .utils import log_event
+    except ImportError:
+        from state import AgentState
+        from utils import log_event
 
 class SecurityPolicy:
     """
@@ -161,6 +162,28 @@ class SecurityAgent:
             log_event("SECURITY", f"SLM Redaction failed: {e}", node_id="security_agent")
             return text
 
+    def validate_plan(self, plan: str, intent: str) -> Dict[str, Any]:
+        """
+        Enforces feature gating based on the user's subscription plan.
+        Tiers: COMMUNITY, PROFESSIONAL, SOVEREIGN
+        """
+        # Gated intents
+        GATED_INTENTS = {
+            "knowledge": ["PROFESSIONAL", "SOVEREIGN"],
+            "image": ["PROFESSIONAL", "SOVEREIGN"],
+            "code": ["SOVEREIGN"],
+            "api": ["SOVEREIGN"]
+        }
+
+        if intent in GATED_INTENTS:
+            allowed_plans = GATED_INTENTS[intent]
+            if plan not in allowed_plans:
+                return {
+                    "is_allowed": False,
+                    "reason": f"Intent '{intent}' requires {allowed_plans[0]} tier or higher."
+                }
+        return {"is_allowed": True}
+
     def validate_request(self, state: AgentState) -> Dict[str, Any]:
         """Checks if the incoming request/context violates any policies or shows abnormal behavior."""
         violations = []
@@ -207,10 +230,24 @@ def security_ingress_node(state: AgentState):
     }
 
     # 2. Security Validation
-    policy_level = state.get("context", {}).get("security_level", "BALANCED")
+    context = state.get("context", {})
+    policy_level = context.get("security_level", "BALANCED")
+    user_plan = context.get("user_plan", "COMMUNITY") # Default to Community
     agent = SecurityAgent(policy_level)
     
-    log_event("SECURITY", f"Enforcing Ingress Policy: {policy_level}", node_id="security_ingress")
+    log_event("SECURITY", f"Enforcing Ingress Policy: {policy_level} | Plan: {user_plan}", node_id="security_ingress")
+    
+    # Plan validation (Feature Gating)
+    intent = state.get("intent", "general")
+    plan_check = agent.validate_plan(user_plan, intent)
+    if not plan_check["is_allowed"]:
+        log_event("SECURITY", f"PLAN_VIOLATION: {plan_check['reason']}", node_id="security_ingress")
+        return {
+            "intent": "plan_violation",
+            "system_status": system_status,
+            "reasoning_steps": [f"Upgrade required: {plan_check['reason']}"]
+        }
+
     check = agent.validate_request(state)
     
     if not check["is_valid"]:
@@ -226,17 +263,30 @@ def security_ingress_node(state: AgentState):
     last_msg = messages[-1]
     original_content = last_msg.content
     
-    # Scrub the latest message if strictness is medium or higher
-    if agent.policy["pii_redaction_strictness"] in ["MEDIUM", "HIGH", "MAX"]:
-        last_msg.content = agent.scrub_pii(last_msg.content)
+    # Check for explicit PII Scrubbing toggle from frontend context
+    context = state.get("context", {})
+    pii_scrubbing_enabled = context.get("pii_scrubbing", False)
+    
+    if pii_scrubbing_enabled or agent.policy["pii_redaction_strictness"] in ["MEDIUM", "HIGH", "MAX"]:
+        if pii_scrubbing_enabled:
+            log_event("SECURITY", "Privacy Layer: Direct Local PII Scrubbing (Ollama) requested.", node_id="security_ingress")
+            last_msg.content = agent.scrub_pii_slm(last_msg.content)
+        else:
+            last_msg.content = agent.scrub_pii(last_msg.content)
+            
         if original_content != last_msg.content:
             log_event("SECURITY", "Privacy Layer: PII Redacted from input.", node_id="security_ingress")
     
+    reasoning_steps = ["Ingress security check passed (System Truth Hydrated)."]
+    if original_content != last_msg.content:
+        reasoning_steps.append("Privacy Layer: Sensitive content redacted locally.")
+
     return {
         "system_status": system_status,
         "active_sentinels": [{"id": "sentinel-desktop", "type": "Desktop", "status": "Connected"}],
         "messages": [last_msg], 
-        "reasoning_steps": ["Ingress security check passed (System Truth Hydrated)."]
+        "pii_redacted": original_content != last_msg.content,
+        "reasoning_steps": reasoning_steps
     }
 
 def security_egress_node(state: AgentState):
@@ -248,21 +298,27 @@ def security_egress_node(state: AgentState):
     
     log_event("SECURITY", "Starting egress safety audit", node_id="security_egress")
     
-    # Handle direct security violations from ingress
-    if state.get("intent") == "security_violation":
-        log_event("SECURITY", "Blocking output due to previous violation", node_id="security_egress")
+    # Handle direct security/plan violations from ingress
+    intent = state.get("intent")
+    if intent in ["security_violation", "plan_violation"]:
+        log_event("SECURITY", f"Blocking output due to {intent}", node_id="security_egress")
+        
+        comp_type = "security_alert" if intent == "security_violation" else "upgrade_prompt"
+        title = "Access Denied" if intent == "security_violation" else "Premium Feature"
+        
         ui_payload = {
             "type": "render_ui",
             "component": {
-                "type": "security_alert",
+                "type": comp_type,
                 "props": {
-                    "title": "Access Denied",
-                    "message": "The requested action violates the current security policy.",
-                    "violations": state.get("reasoning_steps", [])
+                    "title": title,
+                    "message": "The requested action violates the current security policy or requires a subscription upgrade.",
+                    "violations": state.get("reasoning_steps", []),
+                    "action": "upgrade" if intent == "plan_violation" else "check_policy"
                 }
             }
         }
-        return {"ui_payload": ui_payload, "reasoning_steps": ["Egress: Returning security alert."]}
+        return {"ui_payload": ui_payload, "reasoning_steps": [f"Egress: Returning {intent} alert."]}
 
     ui_payload = state.get("ui_payload", {})
     if not ui_payload:

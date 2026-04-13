@@ -19,7 +19,7 @@ def observe_node(state: OpenClawState):
     Ingest real-time sensor fusion (accelerometer, mouse, PARA context).
     Calculates Information Flux (dI/dt).
     """
-    log_event("OPENCLAW", "Observe Phase: Ingesting sensor fusion data.")
+    log_event("AURA", "Observe Phase: Ingesting sensor fusion data.")
     # Mocking sensor ingestion and flux calculation
     sensor_data = state.get("sensor_data", {"velocity": "high", "focus": "editor"})
     return {"messages": [HumanMessage(content=f"Sensors: {sensor_data}")], "intent": "unknown"}
@@ -28,7 +28,7 @@ def orient_node(state: OpenClawState):
     """
     Map sensor vectors to User Intent using the Local LLM (Edge SLM) or Frontier model.
     """
-    log_event("OPENCLAW", "Orient Phase: Mapping sensor vectors to Intent.")
+    log_event("AURA", "Orient Phase: Mapping sensor vectors to Intent.")
     # Here we would normally invoke the Edge SLM to determine intent
     return {"intent": "render_dashboard"}
 
@@ -36,7 +36,7 @@ def decide_node(state: OpenClawState):
     """
     Use the OpenClaw 'Plan-and-Execute' pattern to determine which UI atoms to paint.
     """
-    log_event("OPENCLAW", "Decide Phase: Planning UI atom rendering.")
+    log_event("AURA", "Decide Phase: Planning UI atom rendering.")
     plan = ["fetch_para_context", "generate_dashboard_schema"]
     return {"plan": plan}
 
@@ -44,7 +44,7 @@ def act_node(state: OpenClawState):
     """
     Deliver the AGUI/A2UI payload via MCP to the Canvas.
     """
-    log_event("OPENCLAW", "Act Phase: Delivering payload to Canvas.")
+    log_event("AURA", "Act Phase: Delivering payload to Canvas.")
     # Simulated validation of generated payload
     payload = generate_mcp_payload(intent=state["intent"], ui_type="PARA_DASHBOARD", data={})
     return {"ui_payload": payload, "error_feedback": ""}
@@ -53,14 +53,14 @@ def validate_node(state: OpenClawState):
     """
     Self-Correction logic: If the 'Act' phase fails (UI validation error), OpenClaw must immediately 'Re-Orient'.
     """
-    log_event("OPENCLAW", "Validate Phase: Checking execution integrity.")
+    log_event("AURA", "Validate Phase: Checking execution integrity.")
     if not state.get("ui_payload") or state.get("intent") == "unknown":
         return {"error_feedback": "Invalid payload or intent. Re-orienting."}
     return {"error_feedback": "valid"}
 
 def route_correction(state: OpenClawState):
     if state.get("error_feedback") != "valid" and state.get("error_feedback"):
-        log_event("OPENCLAW", "Self-Correction Triggered: Routing back to Orient.")
+        log_event("AURA", "Self-Correction Triggered: Routing back to Orient.")
         return "Orient"
     return END
 

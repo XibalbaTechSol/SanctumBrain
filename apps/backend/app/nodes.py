@@ -1,95 +1,98 @@
 import json
 import base64
 import os
-
 import time
 import psutil
 import re
-import requests
-import asyncio
-import operator
-import uuid
+import subprocess
+import sys
+import io
 from datetime import datetime
 from typing import Annotated, Sequence, TypedDict, List, Dict, Any
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+
+# --- Hermes (Aura) Integration ---
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+HERMES_PATH = os.path.join(PROJECT_ROOT, "hermes")
+if HERMES_PATH not in sys.path:
+    sys.path.append(HERMES_PATH)
+
+# Isolate Aura's configuration within the project
+AURA_HOME = os.path.join(PROJECT_ROOT, "apps", "backend", ".sanctum_hermes")
+os.environ["HERMES_HOME"] = AURA_HOME
+
+try:
+    from run_agent import AIAgent
+    HERMES_AVAILABLE = True
+except ImportError:
+    print("[!] Warning: Hermes Agent framework not found at", HERMES_PATH)
+    HERMES_AVAILABLE = False
+
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_community.chat_models import ChatOllama
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_community.cache import RedisCache
 from langchain_core.globals import set_llm_cache
 from redis import Redis
-from .state import AgentState, trim_messages
-from .rag import retrieve_context
-from .utils import log_event
-from .prompts import (
-    ORCHESTRATOR_SYSTEM_PROMPT, 
-    VISION_AGENT_PROMPT, 
-    KNOWLEDGE_AGENT_PROMPT,
-    SUPERVISOR_PROMPT,
-    PARA_MANAGER_PROMPT,
-    PARA_EXTRACTION_PROMPT
-)
-from .mcp import generate_mcp_payload, create_para_dashboard_payload, validate_mcp_payload, repair_mcp_payload
+
+try:
+    from app.state import AgentState
+    from app.utils import log_event
+    from app.prompts import AURA_SYSTEM_PROMPT, SECURITY_AGENT_PROMPT
+    from app.mcp import generate_mcp_payload
+    from app.tools.sanctum_tools import register_sanctum_tools
+except ImportError:
+    # Local fallback
+    try:
+        from .state import AgentState
+        from .utils import log_event
+        from .prompts import AURA_SYSTEM_PROMPT, SECURITY_AGENT_PROMPT
+        from .mcp import generate_mcp_payload
+        from .tools.sanctum_tools import register_sanctum_tools
+    except ImportError:
+        from state import AgentState
+        from utils import log_event
+        from prompts import AURA_SYSTEM_PROMPT, SECURITY_AGENT_PROMPT
+        from mcp import generate_mcp_payload
+        from tools.sanctum_tools import register_sanctum_tools
 
 # Load .env file
 load_dotenv()
 
-# --- Efficiency: Global LLM Cache (Redis) ---
-try:
-    redis_url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
-    set_llm_cache(RedisCache(Redis.from_url(redis_url)))
-    log_event("SYSTEM", f"Efficiency: Redis LLM Cache Enabled")
-except Exception as e:
-    print(f"[*] Failed to enable Redis LLM Cache: {e}")
+# --- Model Initialization ---
 
 class ResilientModel:
-    def __init__(self, model, name="Unknown"):
+    def __init__(self, model, name):
         self.model = model
         self.name = name
-        
-    def invoke(self, messages, **kwargs):
-        try:
-            print(f"[*] Neural Core: Invoking {self.name}")
-            return self.model.invoke(messages, **kwargs)
-        except Exception as e:
-            print(f"[*] Neural Core Runtime Error ({self.name}): {e}")
-            raise e
+    def invoke(self, messages):
+        return self.model.invoke(messages)
+
+def initialize_google_model():
+    try:
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if api_key:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            m = ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=api_key, temperature=0)
+            print("[*] Frontier LLM Ready (Google Gemini).")
+            return ResilientModel(m, "Google-Gemini-Pro")
+    except Exception as e:
+        print(f"[!] Gemini initialization failed: {e}")
+    return None
 
 def initialize_local_model():
-    print("[*] Initializing SIMULATED LOCAL SLM (OpenRouter GPT-4o-Mini)...")
-    try:
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        if api_key:
-            m = ChatOpenAI(
-                model="openai/gpt-4o-mini", 
-                openai_api_key=api_key, 
-                openai_api_base="https://openrouter.ai/api/v1",
-                temperature=0
-            )
-            print(f"[*] Simulated Local SLM Ready (OpenRouter).")
-            return ResilientModel(m, "OpenRouter-Simulated-SLM")
-    except Exception as e:
-        print(f"[!] OpenRouter initialization failed: {e}")
+    print("[*] Initializing LOCAL SLM...")
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if api_key:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        m = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key, temperature=0)
+        print("[*] Local SLM Ready (Gemini Flash).")
+        return ResilientModel(m, "Gemini-Flash-Local")
     return None
 
 def initialize_frontier_model():
-    print("[*] Initializing SIMULATED FRONTIER LLM (OpenRouter GPT-4o-Mini)...")
-    try:
-        api_key = os.getenv("OPENROUTER_API_KEY")
-        if api_key:
-            m = ChatOpenAI(
-                model="openai/gpt-4o-mini", 
-                openai_api_key=api_key, 
-                openai_api_base="https://openrouter.ai/api/v1",
-                temperature=0.7
-            )
-            print("[*] Simulated Frontier LLM Ready (OpenRouter).")
-            return ResilientModel(m, "OpenRouter-Simulated-Frontier")
-    except Exception as e:
-        print(f"[!] OpenRouter initialization failed: {e}")
-    
-    return None
+    m = initialize_google_model()
+    if m: return m
+    return initialize_local_model()
 
 def initialize_on_device_model():
     print("[*] Initializing ON-DEVICE SLM (Ollama - Phi3) for PII Redaction...")
@@ -101,304 +104,186 @@ def initialize_on_device_model():
         print(f"[!] Ollama initialization failed: {e}")
         return None
 
-# --- Neural Core Initialization ---
+# Static model instances for security nodes
 local_model = initialize_local_model()
 frontier_model = initialize_frontier_model()
-on_device_model = initialize_on_device_model() or local_model
+on_device_model = initialize_on_device_model()
 
-# Safety fallback: If frontier fails, use local. If both fail, the system will raise errors on invocation.
-if not frontier_model:
-    print("[!] Warning: Frontier Model unavailable. Falling back to Local SLM.")
-    frontier_model = local_model
+def initialize_gemma4_model():
+    print("[*] Initializing GEMMA 4 (Edge Inference Simulator)...")
+    # Using Flash as a proxy for speed in edge synthesis simulation
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if api_key:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        m = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key, temperature=0.2)
+        return ResilientModel(m, "Gemma-4-Edge")
+    return None
 
-if not local_model:
-    print("[!] Warning: Local SLM unavailable. Intent decoding will fail if Frontier is not used as supervisor.")
-    # If local_model is None, we assign frontier to it as a last resort for intent decoding
-    local_model = frontier_model
+gemma4_model = initialize_gemma4_model()
 
-# --- NODES ---
+# --- Prompts ---
+AGUI_CLIENT_PROMPT = """
+You are Gemma 4, the Edge Inference layer of SanctumBrain.
+Your task is to "PAINT" the Generative UI based on the Orchestrator's intent and data.
+- INPUT: A base UI intent and raw data.
+- TASK: Refine the AGUI/A2UI manifest. Add adaptive styling, optimize for the edge device, and ensure high-fidelity presentation.
+- OUTPUT: Valid AGUI JSON only.
+If the intent matches a known high-fidelity pattern (BANKING, WEATHER, CALENDAR), ensure the components are rich and interactive.
+"""
 
-def supervisor_node(state: AgentState):
-    log_event("GRAPH", "Decoding Intent (Local SLM)", node_id="supervisor")
-    messages = state["messages"]
-    last_message = messages[-1].content.lower()
-    
-    sys_status = state.get("system_status", {})
-    summary = f"CPU: {sys_status.get('cpu')}% | RAM: {sys_status.get('mem')}%"
+# --- Aura Orchestrator Implementation ---
 
-    system_prompt = SUPERVISOR_PROMPT.format(system_summary=summary, user_input=last_message)
-    response = local_model.invoke([SystemMessage(content=system_prompt)] + list(messages))
-    content = response.content.strip().lower()
-    
-    intent = "general"
-    intent_map = {
-        "para": ["para", "project", "area", "archive", "resource", "organize"],
-        "system_health": ["system_health", "health", "diagnostics", "status", "telemetry"],
-        "weather": ["weather", "forecast", "temperature", "climate", "atmosphere"],
-        "knowledge": ["knowledge", "memory", "rag", "search", "lookup", "recall"],
-        "image": ["image", "vision"],
-        "audio": ["audio", "voice"],
-        "api": ["api", "tool"],
-        "code": ["code", "exec"],
-        "deep_reason": ["deep_reason", "reasoner"]
-    }
-    
-    # Priority keyword extraction
-    priority_order = ["system_health", "weather", "para", "image", "audio", "code", "knowledge", "deep_reason", "api"]
-
-    # Exact match first
-    for target_intent in priority_order:
-        if target_intent == content:
-            intent = target_intent
-            break
-
-    # Keyword match second
-    if intent == "general":
-        for target_intent in priority_order:
-            keywords = intent_map[target_intent]
-            if any(k in content for k in keywords):
-                intent = target_intent
-                break
-
-    print(f"[*] Supervisor (Local): Classified as '{intent}' | Raw: '{content[:50]}'")
-    return {"intent": intent}
-
-def generator_node(state: AgentState):
-    log_event("GRAPH", "Synthesizing UI Payload (Frontier LLM)", node_id="generator")
-    intent = state.get("intent", "general")
-    sys_status = state.get("system_status", {})
-    sentinels = state.get("active_sentinels", [])
-    
-    messages = state["messages"]
-    system_prompt = ORCHESTRATOR_SYSTEM_PROMPT
-    
-    response = frontier_model.invoke([SystemMessage(content=system_prompt)] + list(messages))
-    content = response.content
-    
-    mcp_payload = None
-    if intent == "system_health":
-        mcp_payload = generate_mcp_payload(
-            intent=intent, 
-            ui_type="SYSTEM_HEALTH_CARD", 
-            data={
-                "metrics": {
-                    "cpu": sys_status.get("cpu", 0),
-                    "mem": sys_status.get("mem", 0),
-                    "disk": sys_status.get("disk", 0),
-                    "vps_id": sys_status.get("vps_id", "Sanctum-VPS"),
-                    "status": sys_status.get("status", "Healthy")
-                }, 
-                "sentinels": sentinels,
-                "summary": content
-            }
-        )
-    elif intent == "knowledge":
-        mcp_payload = generate_mcp_payload(
-            intent=intent, 
-            ui_type="RAG_VISUALIZATION_CARD", 
-            data={
-                "answer": content, 
-                "visualization": state.get("rag_visualization", {
-                    "query": messages[-1].content,
-                    "retrieved_nodes": [],
-                    "latency_ms": 0
-                })
-            }
-        )
-    elif intent == "weather":
-        mcp_payload = generate_mcp_payload(
-            intent=intent,
-            ui_type="WEATHER_CARD",
-            data={
-                "location": "San Francisco",
-                "temperature": 22,
-                "condition": "Sunny",
-                "forecast": [
-                    {"day": "Mon", "temp": 22, "condition": "Sunny"},
-                    {"day": "Tue", "temp": 24, "condition": "Clear"},
-                    {"day": "Wed", "temp": 21, "condition": "Cloudy"}
-                ],
-                "summary": content
-            }
-        )
-    elif intent == "para":
-        mcp_payload = state.get("mcp_ui_payload") or generate_mcp_payload(
-            intent=intent,
-            ui_type="INFO_CARD",
-            data={"title": "PARA System", "content": content}
-        )
-    else:
-        parsed_json = None
-        try:
-            clean_content = re.sub(r'^```(?:json)?|```$', '', content.strip(), flags=re.MULTILINE).strip()
-            parsed_json = json.loads(clean_content)
-        except Exception:
-            pass
-
-        if parsed_json and isinstance(parsed_json, dict) and "ui_payload" in parsed_json:
-            ui_type = parsed_json["ui_payload"].get("type", "INFO_CARD")
-            ui_data = parsed_json["ui_payload"].get("data", parsed_json["ui_payload"].get("content", parsed_json))
-            mcp_payload = generate_mcp_payload(intent=parsed_json.get("intent", intent), ui_type=ui_type, data=ui_data)
-        elif parsed_json and isinstance(parsed_json, dict):
-            mcp_payload = generate_mcp_payload(intent=intent, ui_type=parsed_json.get("type", "INFO_CARD"), data=parsed_json.get("data", parsed_json))
-        else:
-            mcp_payload = generate_mcp_payload(intent=intent, ui_type="INFO_CARD", data={"title": intent.upper(), "content": content})
-
-    # Ensure payload is never None
-    if mcp_payload is None:
-        mcp_payload = generate_mcp_payload(intent="fallback", ui_type="INFO_CARD", data={"title": "NEURAL CORE", "content": content})
-
-    # --- Task 7: Self-Healing UI Pattern ---
-    source_info = f"Frontier reasoning by {frontier_model.name}"
-    is_valid = validate_mcp_payload(mcp_payload)
-    
-    if not is_valid:
-        log_event("SYSTEM", "Malformed Payload Detected. Triggering Self-Healing.", node_id="generator", extra={"intent": intent})
-        mcp_payload = repair_mcp_payload(mcp_payload, default_intent=intent)
-        source_info += " (Self-Healed)"
-
-    # --- Memory Management: Trim messages and clear large binary fields ---
-    state = trim_messages(state)
-    
-    return {
-        "mcp_ui_payload": mcp_payload, 
-        "messages": [AIMessage(content=content)], 
-        "reasoning_steps": [f"Classification by {local_model.name}.", source_info],
-        "image_data": b"", # Clear after use
-        "audio_data": b""  # Clear after use
-    }
-
-from .db.models import Project, Area 
-
-async def para_manager_node(state: AgentState):
+def aura_orchestrator(state: AgentState):
     """
-    Node to manage PARA entities (Projects, Areas, Resources, Archives).
-    Supports LIST, CREATE, UPDATE, and DELETE via SLM-based intent extraction.
+    Aura Orchestrator: The primary agent harness for SanctumBrain.
+    Uses Hermes under the hood, rebranded as Aura.
     """
-    log_event("GRAPH", "Architecting PARA Sovereign View", node_id="para_manager")
-    messages = state["messages"]
-    last_message = messages[-1].content
-    
-    # 1. Parameter Extraction (Local SLM)
-    extract_prompt = PARA_EXTRACTION_PROMPT.format(user_input=last_message)
-    extraction_resp = local_model.invoke([SystemMessage(content=extract_prompt)])
-    
-    try:
-        # Robust JSON extraction using regex
-        json_str = extraction_resp.content.strip()
-        match = re.search(r'(\{.*\})', json_str, re.DOTALL)
-        if match:
-            json_str = match.group(1)
-        
-        params = json.loads(json_str)
-    except Exception as e:
-        print(f"[*] PARA Extraction Error: {e} | Raw: {extraction_resp.content}")
-        # Default fallback
-        params = {"action": "LIST", "type": "PROJECT"}
+    if not HERMES_AVAILABLE:
+        return {"reasoning_steps": ["Aura harness not initialized. Check hermes/ submodule."], "intent": "general"}
 
-    action = params.get("action", "LIST").upper()
-    entity_type = params.get("type", "PROJECT").upper()
+    log_event("AURA", "Synchronizing neural state...", node_id="aura_orchestrator")
     
-    res_msg = ""
-    state_updates = {"intent": "para"}
+    last_message = state["messages"][-1].content
+    system_status = state.get("system_status", {})
+    active_sentinels = state.get("active_sentinels", [])
     
-    # 2. Database Operations (Tortoise-ORM)
-    if action == "CREATE":
-        if entity_type == "PROJECT":
-            new_id = f"proj-{uuid.uuid4().hex[:8]}"
-            await Project.create(id=new_id, title=params.get("title", "Untitled Project"), goal=params.get("goal", ""))
-            res_msg = f"Created Project: {params.get('title')}"
-        elif entity_type == "AREA":
-            await Area.create(id=uuid.uuid4(), name=params.get("title", "Untitled Area"))
-            res_msg = f"Created Area: {params.get('title')}"
-            
-    elif action == "UPDATE":
-        entity_id = params.get("id")
-        if entity_id:
-            if entity_type == "PROJECT":
-                proj = await Project.get_or_none(id=entity_id)
-                if proj:
-                    if "status" in params: proj.status = params["status"]
-                    if "title" in params: proj.title = params["title"]
-                    await proj.save()
-                    res_msg = f"Updated Project: {proj.title}"
-                    state_updates["active_project_id"] = str(entity_id)
-            elif entity_type == "AREA":
-                area = await Area.get_or_none(id=entity_id)
-                if area:
-                    if "title" in params: area.name = params["title"]
-                    await area.save()
-                    res_msg = f"Updated Area: {area.name}"
-                    state_updates["active_area"] = str(entity_id)
-
-    elif action == "DELETE":
-        entity_id = params.get("id")
-        if entity_id:
-            if entity_type == "PROJECT":
-                proj = await Project.get_or_none(id=entity_id)
-                if proj: 
-                    title = proj.title
-                    await proj.delete()
-                    res_msg = f"Deleted Project: {title}"
-            elif entity_type == "AREA":
-                area = await Area.get_or_none(id=entity_id)
-                if area:
-                    name = area.name
-                    await area.delete()
-                    res_msg = f"Deleted Area: {name}"
-
-    elif action == "SELECT":
-        entity_id = params.get("id")
-        if entity_id:
-            if entity_type == "PROJECT":
-                state_updates["active_project_id"] = str(entity_id)
-                res_msg = f"Selected Project as active context."
-            elif entity_type == "AREA":
-                state_updates["active_area"] = str(entity_id)
-                res_msg = f"Selected Area as active context."
-
-    # 3. Data Retrieval for UI (Limit to 50 items for memory efficiency)
-    items_data = []
-    if entity_type == "PROJECT":
-        items_data = await Project.all().limit(50).values()
-    else:
-        items_data = await Area.all().limit(50).values()
+    # Enrich system prompt with real-time "System Truth"
+    dynamic_system_prompt = AURA_SYSTEM_PROMPT + f"\n\nCURRENT SYSTEM TRUTH:\n"
+    dynamic_system_prompt += f"- VPS Status: {system_status.get('status', 'Unknown')}\n"
+    dynamic_system_prompt += f"- CPU Load: {system_status.get('cpu', 0)}%\n"
+    dynamic_system_prompt += f"- Memory: {system_status.get('mem', 0)}%\n"
+    dynamic_system_prompt += f"- Active Sentinels: {len(active_sentinels) if active_sentinels else 0}\n"
     
-    items_data = [dict(i) for i in items_data]
+    # Initialize Aura (Hermes)
+    aura_model = os.getenv("AURA_MODEL", "google/gemini-2.0-flash-001")
+    aura_provider = os.getenv("AURA_PROVIDER", "auto")
     
-    # Format dates for JSON serialization
-    for item in items_data:
-        for k, v in item.items():
-            if isinstance(v, datetime):
-                item[k] = v.isoformat()
-            if isinstance(v, uuid.UUID):
-                item[k] = str(v)
+    # Check for 'Free Mode' (Gemini CLI via MCP)
+    if os.getenv("AURA_FREE_MODE", "false").lower() == "true":
+        aura_model = "mcp-sampling://auto"
+        aura_provider = "mcp-sampling"
+        log_event("AURA", "Switching to Sovereign Free Mode (Gemini CLI MCP)", node_id="aura_orchestrator")
 
-    # 4. Synthesize MCP Payload
-    mcp_payload = create_para_dashboard_payload(
-        view="KANBAN" if entity_type == "PROJECT" else "LIST", 
-        items=items_data, 
-        intent=f"PARA_{action}_{entity_type}"
+    agent = AIAgent(
+        model=aura_model,
+        provider=aura_provider,
+        quiet_mode=True,
+        platform="sanctum-brain",
+        enabled_toolsets=["sanctum", "terminal", "file", "web", "agui"]
     )
     
-    reasoning = f"PARA Database synchronized: {res_msg}" if res_msg else "PARA items retrieved."
+    try:
+        # Run conversation through Aura
+        result = agent.run_conversation(
+            user_message=last_message,
+            system_message=dynamic_system_prompt,
+            conversation_history=[{"role": m.__class__.__name__.replace("Message", "").lower(), "content": m.content} for m in state["messages"][:-1]]
+        )
+        
+        final_response = result.get("final_response", "Aura has synthesized your request.")
+        trajectory = result.get("agent_trajectory", ["Aura processed the request."])
+        
+        # Determine intent if not provided
+        intent = state.get("intent", "general")
+        
+        # --- NEW: Extract AGUI Payload from Hermes Tool Trajectory ---
+        mcp_payload = {}
+        agui_requests = [step for step in result.get("steps", []) if step.get("tool_name") == "render_generative_ui"]
+        
+        if agui_requests:
+            try:
+                # Pluck the last UI synthesis request
+                sr_json = agui_requests[-1].get("tool_output", "{}")
+                sr = json.loads(sr_json)
+                if sr.get("status") == "UI_SYNTHESIS_REQUESTED":
+                    intent = sr.get("intent", intent)
+                    mcp_payload = generate_mcp_payload(
+                        intent=intent,
+                        ui_type=sr.get("ui_type", "INFO_CARD"),
+                        data=sr.get("payload", {})
+                    )
+                    log_event("AURA", f"Kinetic UI Synthesized: {sr.get('ui_type')}", node_id="aura_orchestrator")
+            except:
+                pass
+        
+        # Fallback if no tool was called but we still need UI
+        if not mcp_payload:
+            used_tools = [step.get("tool_name") for step in result.get("steps", []) if "tool_name" in step]
+            if "query_para_database" in used_tools:
+                intent = "PARA_MANAGEMENT"
+            elif "manage_calendar_events" in used_tools:
+                intent = "CALENDAR"
+            
+            mcp_payload = generate_mcp_payload(
+                intent=intent,
+                ui_type="INFO_CARD",
+                data={
+                    "title": "Aura Response",
+                    "content": final_response,
+                    "reasoning": trajectory
+                }
+            )
+
+        return {
+            "messages": [AIMessage(content=final_response)],
+            "reasoning_steps": [f"Aura: {step}" for step in trajectory],
+            "intent": intent,
+            "mcp_ui_payload": mcp_payload,
+            "ui_payload": mcp_payload # For legacy compatibility
+        }
+    except Exception as e:
+        log_event("ERROR", f"Aura Orchestrator Failed: {e}", node_id="aura_orchestrator")
+        return {"reasoning_steps": [f"Aura error: {e}"], "intent": "general"}
+
+async def agui_client_node(state: AgentState):
+    """
+    Gemma 4 Edge Inference Node:
+    Takes the orchestrator's intention and "paints" the final A2UI/AGUI manifest.
+    Dynamically creates/refines UI elements using edge-optimized reasoning.
+    """
+    log_event("SYSTEM", "Gemma 4: Starting Kinetic UI Synthesis (Painting Phase)", node_id="agui_client_node")
     
-    state_updates.update({
-        "mcp_ui_payload": mcp_payload, 
-        "reasoning_steps": [reasoning]
-    })
-    return state_updates
+    intent = state.get("intent", "general")
+    mcp_payload = state.get("mcp_ui_payload", {})
+    
+    # Simulate Edge Inference (Gemma 4)
+    if gemma4_model and mcp_payload:
+        try:
+            # Check for reusable components in DB
+            from app.db.models import AdaptiveUIComponent
+            component = await AdaptiveUIComponent.get_or_none(id=f"{intent.upper()}_UI")
+            
+            base_manifest = component.manifest if component else json.dumps(mcp_payload)
+            
+            # Construct Synthesis Message
+            synthesis_msg = f"PAINT THE UI.\nINTENT: {intent}\nBASE MANIFEST: {base_manifest}\nUSER_CONTEXT: {state.get('user_context', {})}"
+            
+            response = gemma4_model.invoke([
+                SystemMessage(content=AGUI_CLIENT_PROMPT),
+                HumanMessage(content=synthesis_msg)
+            ])
+            
+            # Extract the "painted" JOSN
+            try:
+                painted_json = re.search(r'\{.*\}', response.content, re.DOTALL).group()
+                final_payload = json.loads(painted_json)
+                
+                # If this was a successful adaptive synthesis, we could save/update it here
+                # (Optional: Logic to save refined components back to AdaptiveUIComponent)
+                
+                log_event("SYSTEM", f"Gemma 4: UI Painting Complete ({intent})", node_id="agui_client_node")
+                return {
+                    "mcp_ui_payload": final_payload,
+                    "status": "DISPATCHED"
+                }
+            except:
+                log_event("WARNING", "Gemma 4 synthesis failed to return valid JSON. Using original payload.", node_id="agui_client_node")
+        except Exception as e:
+            log_event("ERROR", f"Gemma 4 Stage Failed: {e}", node_id="agui_client_node")
 
-def vision_node(state: AgentState): 
-    # Logic to process image would go here
-    return {"reasoning_steps": ["Image analyzed."], "image_data": b""}
+    return {
+        "mcp_ui_payload": mcp_payload,
+        "status": "DISPATCHED"
+    }
 
-def audio_node(state: AgentState): 
-    # Logic to process audio would go here
-    return {"reasoning_steps": ["Audio transcribed."], "audio_data": b""}
-def reasoner_node(state: AgentState): return {"reasoning_steps": ["Deliberation Complete."]}
-def rag_node(state: AgentState):
-    query = state["messages"][-1].content
-    retrieval_result = retrieve_context(query)
-    return {"rag_visualization": retrieval_result["visualization"], "retrieved_context": "\n\n".join(retrieval_result["context_strings"]), "reasoning_steps": ["Memory searched."]}
-def code_execution_node(state: AgentState): return {"reasoning_steps": ["Code executed."]}
+# Note: Legacy specialist nodes (vision, audio, etc.) have been removed.

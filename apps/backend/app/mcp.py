@@ -51,9 +51,13 @@ def repair_mcp_payload(payload: Dict[str, Any], default_intent: str = "general")
 def create_para_dashboard_payload(view: str, items: List[Dict[str, Any]], intent: str = "PARA_MANAGEMENT") -> Dict[str, Any]:
     """
     Convenience function for PARA dashboard payloads.
+    Includes hints for available PARA tools.
     """
     data = {
         "view": view, # KANBAN, TABLE, GALLERY
         "items": items
     }
-    return generate_mcp_payload(intent, "PARA_DASHBOARD", data)
+    tools = [
+        {"name": "query_para_database", "description": "Modify the PARA structure (CREATE, UPDATE, DELETE)"}
+    ]
+    return generate_mcp_payload(intent, "PARA_DASHBOARD", data, tools=tools)
